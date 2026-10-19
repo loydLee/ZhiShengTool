@@ -1,0 +1,18 @@
+{
+  "name": "phone-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "智胜系统外呼取数与工单处理自动化",
+  "main": "run.js",
+  "scripts": {
+    "start": "node run.js",
+    "gui": "node gui-server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "playwright": "1.41.2",
+    "xlsx": "^0.18.5"
+  }
+}
