@@ -408,6 +408,26 @@ async function goToQueryFirstPage(page) {
   }
 }
 
+async function goToQueryPage(page, pageNumber) {
+  if (pageNumber <= 1) {
+    await goToQueryFirstPage(page);
+    return;
+  }
+  const editor = page.locator('.el-pagination__editor input:visible, .el-pagination input[aria-label*="页"]:visible').last();
+  if (!(await editor.count())) {
+    throw new Error('未找到分页页码输入框，无法跳转到指定页');
+  }
+  await editor.fill(String(pageNumber));
+  await editor.press('Enter');
+  await sleep(ACTION_DELAY);
+  const activePage = page.locator('.el-pagination li.is-active').last();
+  await activePage.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  const activeText = cleanCellText(await activePage.innerText().catch(() => ''));
+  if (activeText && activeText !== String(pageNumber)) {
+    throw new Error(`分页跳转失败，当前页为 ${activeText}，目标页为 ${pageNumber}`);
+  }
+}
+
 async function goToQueryNextPage(page) {
   const next = page.locator('.el-pagination .btn-next').first();
   if (await next.count()) {
@@ -425,7 +445,7 @@ async function goToQueryNextPage(page) {
   return true;
 }
 
-async function runTaskQuery(amount) {
+async function runTaskQuery(amount, startPage = 1) {
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '').replace('T', '_').slice(0, 13);
   const outputDir = path.join(__dirname, '执行结果', '工单查询');
   fs.mkdirSync(outputDir, { recursive: true });
@@ -443,10 +463,10 @@ async function runTaskQuery(amount) {
   const body = page.locator('body');
   await body.waitFor({ state: 'visible', timeout: 15000 });
   await page.locator('.el-table__body-wrapper tbody tr').first().waitFor({ state: 'attached', timeout: 30000 }).catch(() => {});
-  await goToQueryFirstPage(page);
+  await goToQueryPage(page, startPage);
 
   let saved = 0;
-  let pagesVisited = 0;
+  let pagesVisited = startPage - 1;
   while (saved < amount) {
     pagesVisited += 1;
     const rows = await getQueryTableRows(page);
@@ -471,7 +491,7 @@ async function runTaskQuery(amount) {
     if (saved >= amount) break;
     if (!await goToQueryNextPage(page)) break;
   }
-  console.log(`工单查询完成，已保存 ${saved}/${amount} 条，查询页数 ${pagesVisited}，文件：${outputFile}`);
+  console.log(`工单查询完成，从第 ${startPage} 页开始，已保存 ${saved}/${amount} 条，查询页数 ${pagesVisited}，文件：${outputFile}`);
 }
 
 async function scrollReportTable(page) {
@@ -655,9 +675,12 @@ async function runAirForceReport(projectId) {
 async function main() {
   if (process.env.PHONE_AUTOMATION_MODE === TASK_QUERY_MODE) {
     const amountText = process.env.PHONE_AUTOMATION_AMOUNT || await ask('请输入工单查询数量：');
+    const startText = process.env.PHONE_AUTOMATION_START_PAGE || await ask('请输入起始页码（回车默认第 1 页）：', '1');
     const amount = Number(amountText);
+    const startPage = Number(startText);
     if (!Number.isInteger(amount) || amount < 1 || amount > 10000) throw new Error('查询数量必须是 1-10000 的整数');
-    await runTaskQuery(amount);
+    if (!Number.isInteger(startPage) || startPage < 1 || startPage > 10000) throw new Error('起始页码必须是 1-10000 的整数');
+    await runTaskQuery(amount, startPage);
     return;
   }
   if (process.env.PHONE_AUTOMATION_MODE === REPORT_MODE) {
